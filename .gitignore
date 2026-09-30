@@ -8,3 +8,11 @@ dist/
 *.tsbuildinfo
 .DS_Store
 .vscode/
+
+# Solana / Anchor local artifacts and secret keypairs
+.anchor/
+test-ledger/
+target/
+programs/*/target/
+*-keypair.json
+id.json

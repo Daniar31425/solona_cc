@@ -31,6 +31,7 @@ type Delivery = {
   destination: string;
   reward: number;
   createSignature: string;
+  proofHash?: string;
   completeSignature?: string;
 };
 
@@ -44,6 +45,12 @@ function shortKey(value: string) {
 
 function explorer(signature: string) {
   return `https://explorer.solana.com/tx/${signature}?cluster=devnet`;
+}
+
+async function sha256Hex(value: string) {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export default function App() {
@@ -147,18 +154,34 @@ export default function App() {
   }
 
   async function simulateMission() {
-    setBusy(true);
-    setMessage("Drone-01 is executing the route…");
-    for (let index = 0; index < STEPS.length; index += 1) {
-      await new Promise((resolve) => window.setTimeout(resolve, 650));
-      setStep(index);
+    if (!delivery) return;
+    try {
+      setBusy(true);
+      setMessage("Drone-01 is executing the simulated route…");
+      for (let index = 0; index < STEPS.length; index += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 650));
+        setStep(index);
+      }
+      const proof = JSON.stringify({
+        schemaVersion: 1,
+        deliveryId: delivery.id,
+        machineId: "DRONE-01",
+        pickup: delivery.pickup,
+        destination: delivery.destination,
+        verificationMethod: "SIMULATED_MISSION",
+      });
+      const proofHash = await sha256Hex(proof);
+      setDelivery((current) => current ? { ...current, proofHash } : current);
+      setMessage("Simulated mission completed. A real SHA-256 proof commitment is ready for settlement.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Proof generation failed.");
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
-    setMessage("Physical delivery simulated. Proof is ready for settlement.");
   }
 
   async function verifyAndSettle() {
-    if (!delivery) return;
+    if (!delivery?.proofHash) return;
     try {
       setBusy(true);
       setMessage(`Approve the ${delivery.reward} SOL settlement in Phantom…`);
@@ -167,7 +190,8 @@ export default function App() {
           protocol: "RoboNet",
           action: "COMPLETE_DELIVERY",
           deliveryId: delivery.id,
-          proof: "SIMULATED_PROOF_VERIFIED",
+          proofHash: delivery.proofHash,
+          verificationMethod: "SIMULATED_MISSION",
           courier: "Drone-01",
         },
         delivery.reward,
@@ -211,12 +235,12 @@ export default function App() {
         </div>
         <div className="signal-card">
           <div className="radar"><span>✦</span></div>
-          <div><strong>2 MACHINES</strong><small>ONLINE & READY</small></div>
+          <div><strong>2 DEMO MACHINES</strong><small>SIMULATED & READY</small></div>
         </div>
       </header>
 
       <section className="machine-section">
-        <div className="section-title"><h2>Available machines</h2><span>LIVE FLEET</span></div>
+        <div className="section-title"><h2>Available machines</h2><span>SIMULATED FLEET</span></div>
         <div className="machine-grid">
           <article className="machine-card active">
             <div className="machine-icon">✣</div><div><h3>Drone-01</h3><p>Autonomous aerial courier</p></div><span className="status">AVAILABLE</span>
@@ -256,6 +280,7 @@ export default function App() {
           <div className="delivery-meta">
             <div><small>COURIER</small><strong>Drone-01</strong></div>
             <div><small>REWARD</small><strong>{delivery.reward} SOL</strong></div>
+            <div><small>OPERATOR WALLET</small><strong title={OPERATOR_WALLET.toBase58()}>{shortKey(OPERATOR_WALLET.toBase58())}</strong></div>
             <div><small>CREATE TX</small><a href={explorer(delivery.createSignature)} target="_blank" rel="noreferrer">{shortKey(delivery.createSignature)} ↗</a></div>
           </div>
 
@@ -265,7 +290,7 @@ export default function App() {
 
           {delivery.completeSignature ? (
             <div className="settlement-box">
-              <div><small>PROOF OF DELIVERY</small><strong>VERIFIED</strong></div>
+              <div><small>SIMULATED PROOF · SHA-256</small><strong title={delivery.proofHash}>COMMITTED {delivery.proofHash?.slice(0, 10)}…</strong></div>
               <div><small>SETTLEMENT</small><strong>CONFIRMED</strong></div>
               <a href={explorer(delivery.completeSignature)} target="_blank" rel="noreferrer">View settlement on Explorer ↗</a>
               <button className="secondary" onClick={resetDemo}>New delivery</button>

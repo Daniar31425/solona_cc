@@ -2,3 +2,7 @@ allowBuilds:
   bufferutil: false
   esbuild: true
   utf-8-validate: false
+
+overrides:
+  source-map-js: ^1.2.2
+  stream-json: ^3.6.0
